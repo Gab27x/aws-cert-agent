@@ -60,16 +60,23 @@ docker compose logs -f langfuse-web
 
 **4. Configurar Langfuse (observabilidad):**
 
-- Abrir http://localhost:3000
-- Crear cuenta local (cualquier email/contraseña)
-- Crear una organización y un proyecto
-- Ir a **Settings → API Keys → Create new API key**
-- Copiar las claves al `.env`:
-  ```env
-  LANGFUSE_PUBLIC_KEY=pk-lf-...
-  LANGFUSE_SECRET_KEY=sk-lf-...
-  ```
-- Reiniciar el agente: `docker compose restart agent`
+Abrir http://localhost:3000 y seguir estos pasos en orden:
+
+1. Hacer clic en **Sign up** e ingresar cualquier email y contraseña (es local, no se valida)
+2. En la pantalla **Create organization**, escribir un nombre (ej. `aws-agent-org`) y confirmar
+3. En la pantalla **Create project**, escribir un nombre (ej. `aws-cert-agent`) y confirmar
+4. En el panel del proyecto, ir a **Settings** (menú lateral izquierdo, abajo)
+5. Ir a la sección **API Keys** y hacer clic en **Create new API key**
+6. Copiar el **Public Key** (`pk-lf-...`) y el **Secret Key** (`sk-lf-...`)
+7. Pegar las claves en `.env`:
+   ```env
+   LANGFUSE_PUBLIC_KEY=pk-lf-...
+   LANGFUSE_SECRET_KEY=sk-lf-...
+   ```
+8. Reiniciar el agente para que tome las nuevas variables:
+   ```bash
+   docker compose restart agent
+   ```
 
 **5. Abrir el chat:**
 
