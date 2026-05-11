@@ -1,0 +1,164 @@
+services:
+
+  # ══════════════════════════════════════════════
+  # RAG — PostgreSQL con pgvector
+  # Base de datos para embeddings y vectores
+  # ══════════════════════════════════════════════
+  postgres-rag:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: rag
+    volumes:
+      - pgdata-rag:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ══════════════════════════════════════════════
+  # LANGFUSE v3 — Infraestructura de observabilidad
+  # ══════════════════════════════════════════════
+
+  postgres-langfuse:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: langfuse
+    volumes:
+      - pgdata-langfuse:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    restart: always
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/keeper.xml
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server /data --console-address ":9090"'
+    environment:
+      MINIO_ROOT_USER: test
+      MINIO_ROOT_PASSWORD: test1234
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    restart: always
+    depends_on:
+      postgres-langfuse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://test:test@postgres-langfuse:5432/langfuse
+      SALT: "test"
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      NEXTAUTH_SECRET: "test"
+      NEXTAUTH_URL: http://localhost:3000
+      TELEMETRY_ENABLED: "false"
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://test:test@clickhouse:9000/default
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: test
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: test1234
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    restart: always
+    depends_on:
+      postgres-langfuse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://test:test@postgres-langfuse:5432/langfuse
+      SALT: "test"
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: test
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: test1234
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      CLICKHOUSE_MIGRATION_URL: clickhouse://test:test@clickhouse:9000/default
+
+  # ══════════════════════════════════════════════
+  # AGENTE — Chainlit + LangGraph
+  # ══════════════════════════════════════════════
+  agent:
+    build: ./agent
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres-rag:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./agent:/app
+
+volumes:
+  pgdata-rag:
+  pgdata-langfuse:
+  clickhouse-data:
+  minio-data:
