@@ -129,23 +129,39 @@ docker compose restart agent
 
 El mensaje de bienvenida del chat indica el proveedor activo.
 
-## RAG — Implementación pendiente
+## RAG — Implementado (pgvector)
 
-El módulo de Retrieval-Augmented Generation está estructurado pero no implementado. Para activarlo:
+El RAG ya está implementado con **PostgreSQL + pgvector**. Flujo:
+1) pones tus documentos en `agent/docs/` → 2) corres la ingesta → 3) el agente recupera chunks y los inyecta como contexto.
 
-1. Agregar documentos PDF en `agent/docs/` por certificación:
-   ```
-   agent/docs/cloud-practitioner/
-   agent/docs/security-specialty/
-   agent/docs/ml-specialty/
-   ```
-2. Implementar la lógica en `agent/ingest/ingest.py` (chunking + embeddings + inserción en pgvector)
-3. Implementar `get_retriever()` en `agent/agent/retriever.py`
-4. Descomentar el bloque RAG en `agent/agent/graph.py`
-5. Ejecutar la ingestión:
-   ```bash
-   docker compose exec agent python ingest/ingest.py
-   ```
+### 1) ¿Dónde pongo mis 3 documentos?
+
+Colócalos dentro de `agent/docs/` en la carpeta que corresponda a la certificación:
+
+```
+agent/docs/cloud-practitioner/
+agent/docs/security-specialty/
+agent/docs/ml-specialty/
+```
+
+Se soportan `.pdf`, `.txt` y `.md`.
+
+### 2) Ejecutar ingesta
+
+Recomendado (borra y recrea la colección para evitar duplicados):
+
+```bash
+docker compose exec agent python ingest/ingest.py --reset
+```
+
+### 3) Variables útiles
+
+- `RAG_ENABLED` (default: `true`) — si lo pones en `false`, el agente responde sin RAG.
+- `RAG_COLLECTION` (default: `aws_certifications`) — nombre de colección.
+- `RAG_K` (default: `5`) — cantidad de chunks recuperados por pregunta.
+- `EMBEDDING_MODEL` (default: `text-embedding-3-small`).
+
+Nota: **los embeddings del RAG usan OpenAI**, así que aunque uses `LLM_PROVIDER=groq`, para la ingesta/búsqueda necesitas `OPENAI_API_KEY`.
 
 ## Comandos útiles
 

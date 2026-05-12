@@ -13,29 +13,45 @@
 # que actualmente está comentado.
 # ══════════════════════════════════════════════════════════════
 
+from __future__ import annotations
+
+import os
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
-import os
 
-CONNECTION_STRING = os.getenv("DATABASE_URL", "")
-COLLECTION_NAME = "aws_certifications"
 
-def get_retriever():
+def _env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Falta la variable de entorno obligatoria: {name}")
+    return value
+
+
+def get_vectorstore() -> PGVector:
+    """Crea un vectorstore PGVector apuntando a postgres-rag."""
+
+    connection_string = _env("DATABASE_URL")
+    collection_name = os.getenv("RAG_COLLECTION", "aws_certifications")
+    embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+
+    # Embeddings: actualmente se usa OpenAI para embeddings.
+    # Aunque el LLM sea Groq, para RAG necesitas OPENAI_API_KEY.
+    _env("OPENAI_API_KEY")
+
+    embeddings = OpenAIEmbeddings(model=embedding_model)
+    return PGVector(
+        connection_string=connection_string,
+        embedding_function=embeddings,
+        collection_name=collection_name,
+    )
+
+
+def get_retriever(k: int | None = None):
+    """Retorna un retriever conectado a pgvector.
+
+    Requiere que antes se haya corrido la ingesta en `agent/ingest/ingest.py`.
     """
-    TODO: Implementar cuando los documentos estén ingestados.
 
-    Retorna un retriever de LangChain conectado a pgvector.
-    Busca entre los documentos de las 3 certificaciones AWS:
-    - Cloud Practitioner (CLF-C02)
-    - Security Specialty (SCS-C02)
-    - Machine Learning Specialty (MLS-C01)
-    """
-    # PENDIENTE: descomentar cuando ingest.py esté listo
-    # embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    # vectorstore = PGVector(
-    #     connection_string=CONNECTION_STRING,
-    #     embedding_function=embeddings,
-    #     collection_name=COLLECTION_NAME,
-    # )
-    # return vectorstore.as_retriever(search_kwargs={"k": 5})
-    raise NotImplementedError("RAG pendiente de implementación. Ver ingest/ingest.py")
+    k_final = k or int(os.getenv("RAG_K", "5"))
+    vectorstore = get_vectorstore()
+    return vectorstore.as_retriever(search_kwargs={"k": k_final})

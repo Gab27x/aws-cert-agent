@@ -33,12 +33,16 @@
 - Pregunta de prueba realizada: PENDIENTE (verificar en http://localhost:8000)
 - Traza visible en Langfuse: PENDIENTE (keys configuradas, verificar en http://localhost:3000)
 
-## Pendiente — RAG
+## RAG (pgvector)
+
+Estado del código:
+- [x] Implementada ingesta en `agent/ingest/ingest.py`
+- [x] Implementado retriever en `agent/agent/retriever.py`
+- [x] Activado nodo `retrieve` en `agent/agent/graph.py`
+
+Pendiente para quedar operativo con tus documentos:
 - [ ] Agregar documentos en `agent/docs/` organizados por certificación
-- [ ] Implementar `agent/ingest/ingest.py`
-- [ ] Implementar `agent/agent/retriever.py`
-- [ ] Activar el nodo RAG en `agent/agent/graph.py`
-- [ ] Ejecutar `docker compose exec agent python ingest/ingest.py`
+- [ ] Ejecutar `docker compose exec agent python ingest/ingest.py --reset`
 
 ## Notas del agente implementador
 

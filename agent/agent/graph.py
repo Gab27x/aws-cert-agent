@@ -1,6 +1,6 @@
 # graph.py — LangGraph Agent
 import os
-from typing import TypedDict
+from typing import TypedDict, Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from .prompts import SYSTEM_PROMPT
@@ -26,14 +26,54 @@ def _build_llm():
 class AgentState(TypedDict):
     question: str
     history: list
+    context: str
     answer: str
 
 
+def retrieve(state: AgentState, config: Optional[dict] = None) -> AgentState:
+    """Recupera contexto desde pgvector (si está disponible).
+
+    Nunca debe tumbar el chat: si hay un error (sin docs, sin DB, sin OPENAI_API_KEY),
+    devuelve `context` vacío y el agente responde sin RAG.
+    """
+
+    rag_enabled = os.getenv("RAG_ENABLED", "true").lower() in {"1", "true", "yes", "y"}
+    if not rag_enabled:
+        return {**state, "context": ""}
+
+    try:
+        from .retriever import get_retriever
+
+        retriever = get_retriever()
+        docs = retriever.invoke(state["question"], config=config)
+        context = "\n\n".join(
+            [
+                f"[cert={d.metadata.get('certification','unknown')}]\n{d.page_content}"
+                for d in docs
+                if getattr(d, "page_content", None)
+            ]
+        )
+        return {**state, "context": context}
+    except Exception:
+        return {**state, "context": ""}
+
+
 # ── Nodo principal: llamada al LLM ───────────────────────────
-def call_llm(state: AgentState) -> AgentState:
+def call_llm(state: AgentState, config: Optional[dict] = None) -> AgentState:
     llm = _build_llm()
 
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
+
+    if state.get("context"):
+        messages.append(
+            SystemMessage(
+                content=(
+                    "Contexto (RAG) de materiales de estudio. "
+                    "Úsalo solo si es relevante para responder.\n\n"
+                    f"{state['context']}"
+                )
+            )
+        )
 
     for turn in state.get("history", []):
         messages.append(HumanMessage(content=turn["human"]))
@@ -41,17 +81,7 @@ def call_llm(state: AgentState) -> AgentState:
 
     messages.append(HumanMessage(content=state["question"]))
 
-    # ── RAG: PENDIENTE ────────────────────────────────────────
-    # Cuando el RAG esté listo, antes del LLM se hará:
-    #
-    # from .retriever import get_retriever
-    # retriever = get_retriever()
-    # docs = retriever.invoke(state["question"])
-    # context = "\n\n".join([d.page_content for d in docs])
-    # Y se inyectará `context` en el SystemMessage o como mensaje adicional
-    # ─────────────────────────────────────────────────────────
-
-    response = llm.invoke(messages)
+    response = llm.invoke(messages, config=config)
 
     return {**state, "answer": response.content}
 
@@ -59,7 +89,9 @@ def call_llm(state: AgentState) -> AgentState:
 # ── Construcción del grafo ────────────────────────────────────
 def build_graph():
     graph = StateGraph(AgentState)
+    graph.add_node("retrieve", retrieve)
     graph.add_node("llm", call_llm)
-    graph.set_entry_point("llm")
+    graph.set_entry_point("retrieve")
+    graph.add_edge("retrieve", "llm")
     graph.add_edge("llm", END)
     return graph.compile()
