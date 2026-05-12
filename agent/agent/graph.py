@@ -2,6 +2,7 @@
 import os
 from typing import TypedDict, Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from .prompts import SYSTEM_PROMPT
 
@@ -30,7 +31,7 @@ class AgentState(TypedDict):
     answer: str
 
 
-def retrieve(state: AgentState, config: Optional[dict] = None) -> AgentState:
+def retrieve(state: AgentState, config: Optional[RunnableConfig] = None) -> AgentState:
     """Recupera contexto desde pgvector (si está disponible).
 
     Nunca debe tumbar el chat: si hay un error (sin docs, sin DB, sin OPENAI_API_KEY),
@@ -59,7 +60,7 @@ def retrieve(state: AgentState, config: Optional[dict] = None) -> AgentState:
 
 
 # ── Nodo principal: llamada al LLM ───────────────────────────
-def call_llm(state: AgentState, config: Optional[dict] = None) -> AgentState:
+def call_llm(state: AgentState, config: RunnableConfig) -> AgentState:
     llm = _build_llm()
 
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
