@@ -2,6 +2,7 @@
 import os
 from typing import TypedDict
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from .prompts import SYSTEM_PROMPT
 
@@ -30,7 +31,7 @@ class AgentState(TypedDict):
 
 
 # ── Nodo principal: llamada al LLM ───────────────────────────
-def call_llm(state: AgentState) -> AgentState:
+def call_llm(state: AgentState, config: RunnableConfig) -> AgentState:
     llm = _build_llm()
 
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
@@ -51,7 +52,7 @@ def call_llm(state: AgentState) -> AgentState:
     # Y se inyectará `context` en el SystemMessage o como mensaje adicional
     # ─────────────────────────────────────────────────────────
 
-    response = llm.invoke(messages)
+    response = llm.invoke(messages, config)
 
     return {**state, "answer": response.content}
 
